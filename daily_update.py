@@ -8,10 +8,7 @@ import subprocess
 # --------------------------------------------------
 
 REPO = Path(__file__).resolve().parent
-
-# Change this if your actual Excel filename is different
 EXCEL_FILE = REPO / "12603644.xlsx"
-
 SHEET_NAME = "Daily Log"
 LOG_FOLDER = REPO / "logs"
 
@@ -23,8 +20,7 @@ LOG_FOLDER = REPO / "logs"
 def ask_number(question):
     while True:
         try:
-            value = input(question).strip()
-            return int(value)
+            return int(input(question).strip())
         except ValueError:
             print("Please enter a number.")
 
@@ -39,117 +35,190 @@ def ask_choice(question, choices):
     while True:
         try:
             number = int(input("Choose: "))
+
             if 1 <= number <= len(choices):
                 return choices[number - 1]
+
         except ValueError:
             pass
 
-        print("Please choose a valid number.")
+        print("Please choose a valid option.")
+
+
+# --------------------------------------------------
+# CHECK FILE
+# --------------------------------------------------
+
+if not EXCEL_FILE.exists():
+    print("\nERROR: Excel file not found:")
+    print(EXCEL_FILE)
+    input("\nPress Enter to exit...")
+    raise SystemExit
 
 
 # --------------------------------------------------
 # LOAD EXCEL
 # --------------------------------------------------
 
-if not EXCEL_FILE.exists():
-    print(f"\nERROR: Excel file not found:")
-    print(EXCEL_FILE)
-    input("\nPress Enter to exit...")
-    raise SystemExit
-
 workbook = load_workbook(EXCEL_FILE)
 sheet = workbook[SHEET_NAME]
 
-
-# --------------------------------------------------
-# FIND LAST ENTRY
-# --------------------------------------------------
+today = datetime.now().date()
 
 last_date = None
 last_row = None
 
+# --------------------------------------------------
+# FIND LAST LOGGED DATE
+# --------------------------------------------------
+
 for row in range(6, sheet.max_row + 1):
+
     value = sheet.cell(row, 1).value
 
     if isinstance(value, datetime):
-        last_date = value
-        last_row = row
+        current_date = value.date()
 
     elif value:
         try:
-            last_date = datetime.strptime(str(value), "%Y-%m-%d")
-            last_row = row
-        except ValueError:
-            pass
+            current_date = datetime.strptime(
+                str(value),
+                "%Y-%m-%d"
+            ).date()
 
+        except ValueError:
+            continue
+
+    else:
+        continue
+
+    if last_date is None or current_date > last_date:
+        last_date = current_date
+        last_row = row
+
+
+# --------------------------------------------------
+# DETERMINE NEXT DATE
+# --------------------------------------------------
 
 if last_date:
     next_date = last_date + timedelta(days=1)
 else:
-    next_date = datetime.now()
+    next_date = today
 
 
 # --------------------------------------------------
-# SHOW ENTRY DATE
+# DUPLICATE PROTECTION
+# --------------------------------------------------
+
+if last_date == today:
+
+    print("\n========================================")
+    print("          ALREADY LOGGED TODAY")
+    print("========================================")
+
+    print(
+        f"\nYou already have a log for "
+        f"{today.strftime('%d %B %Y')}."
+    )
+
+    print("\nNo changes were made.")
+
+    input("\nPress Enter to exit...")
+    raise SystemExit
+
+
+# --------------------------------------------------
+# SHOW LOGGER
 # --------------------------------------------------
 
 print("\n========================================")
-print("        DAILY TASK LOGGER")
+print("          DAILY TASK LOGGER")
 print("========================================")
 
-print(f"\nNext entry: {next_date.strftime('%d %B %Y')}")
+print(
+    f"\nNew entry: {next_date.strftime('%d %B %Y')}"
+)
+
+print("\nDurations are in MINUTES.\n")
 
 
 # --------------------------------------------------
 # COLLECT DATA
 # --------------------------------------------------
 
-print("\nEnter today's data.")
-print("Durations are in MINUTES.\n")
-
 sleep = ask_number("Sleep (minutes): ")
+
 fitness = ask_number("Fitness (minutes): ")
+
 study = ask_number("Study (minutes): ")
+
 coding = ask_number("Coding (minutes): ")
+
 class_time = ask_number("Class (minutes): ")
-classes_attended = ask_number("Classes attended: ")
-other = ask_number("Other activities (minutes): ")
+
+classes_attended = ask_number(
+    "Classes attended: "
+)
+
+other = ask_number(
+    "Other activities (minutes): "
+)
+
 
 feeling = ask_choice(
     "Today's feeling:",
-    ["Low", "Neutral", "Good"]
+    [
+        "Low",
+        "Neutral",
+        "Good"
+    ]
 )
+
 
 satisfaction = ask_choice(
     "Satisfaction level:",
-    ["Unsatisfied", "Neutral", "Satisfied"]
+    [
+        "Unsatisfied",
+        "Neutral",
+        "Satisfied"
+    ]
 )
+
 
 energy = ask_choice(
     "Energy level:",
-    ["Low", "Medium", "High"]
+    [
+        "Low",
+        "Medium",
+        "High"
+    ]
 )
+
 
 notes = input("\nNotes: ").strip()
 
 
 # --------------------------------------------------
-# FIND EMPTY ROW
+# FIND EMPTY EXCEL ROW
 # --------------------------------------------------
 
 target_row = None
 
 for row in range(6, sheet.max_row + 1):
+
     if sheet.cell(row, 1).value is None:
+
         target_row = row
         break
+
 
 if target_row is None:
     target_row = sheet.max_row + 1
 
 
 # --------------------------------------------------
-# WRITE TO EXCEL
+# WRITE DATA
 # --------------------------------------------------
 
 sheet.cell(target_row, 1).value = next_date
@@ -161,15 +230,22 @@ sheet.cell(target_row, 6).value = class_time
 sheet.cell(target_row, 7).value = classes_attended
 sheet.cell(target_row, 8).value = other
 
-# Preserve the formulas already used by your workbook
+
+# Total Tracked
 sheet.cell(target_row, 9).value = (
-    f'=IF(SUM(B{target_row}:F{target_row},H{target_row})=0,"",'
-    f'SUM(B{target_row}:F{target_row},H{target_row}))'
+    f'=IF(SUM(B{target_row}:F{target_row},'
+    f'H{target_row})=0,"",'
+    f'SUM(B{target_row}:F{target_row},'
+    f'H{target_row}))'
 )
 
+
+# Free / Unaccounted
 sheet.cell(target_row, 10).value = (
-    f'=IF(I{target_row}="","",1440-I{target_row})'
+    f'=IF(I{target_row}="","",'
+    f'1440-I{target_row})'
 )
+
 
 sheet.cell(target_row, 11).value = feeling
 sheet.cell(target_row, 12).value = satisfaction
@@ -177,26 +253,42 @@ sheet.cell(target_row, 13).value = energy
 sheet.cell(target_row, 14).value = notes
 
 
-# Copy formatting from previous row
+# --------------------------------------------------
+# COPY FORMATTING
+# --------------------------------------------------
+
 if target_row > 6:
+
     source_row = target_row - 1
 
     for column in range(1, 15):
-        source = sheet.cell(source_row, column)
-        target = sheet.cell(target_row, column)
+
+        source = sheet.cell(
+            source_row,
+            column
+        )
+
+        target = sheet.cell(
+            target_row,
+            column
+        )
 
         if source.has_style:
             target._style = source._style
 
-        if source.number_format:
-            target.number_format = source.number_format
+        target.number_format = source.number_format
 
 
-# Make sure date is displayed correctly
-sheet.cell(target_row, 1).number_format = "dd-mmm-yyyy"
+sheet.cell(
+    target_row,
+    1
+).number_format = "dd-mmm-yyyy"
 
 
-# Save Excel
+# --------------------------------------------------
+# SAVE EXCEL
+# --------------------------------------------------
+
 workbook.save(EXCEL_FILE)
 
 
@@ -210,8 +302,18 @@ date_string = next_date.strftime("%Y-%m-%d")
 
 log_file = LOG_FOLDER / f"{date_string}.md"
 
-total_tracked = sleep + fitness + study + coding + class_time + other
+
+total_tracked = (
+    sleep
+    + fitness
+    + study
+    + coding
+    + class_time
+    + other
+)
+
 free_time = 1440 - total_tracked
+
 
 log_content = f"""# Daily Log — {next_date.strftime("%d %B %Y")}
 
@@ -243,14 +345,19 @@ log_content = f"""# Daily Log — {next_date.strftime("%d %B %Y")}
 {notes if notes else "_No notes._"}
 """
 
-log_file.write_text(log_content, encoding="utf-8")
+
+log_file.write_text(
+    log_content,
+    encoding="utf-8"
+)
 
 
 # --------------------------------------------------
-# GIT
+# GIT HELPER
 # --------------------------------------------------
 
-def run_git(command):
+def git(command):
+
     result = subprocess.run(
         command,
         cwd=REPO,
@@ -259,70 +366,113 @@ def run_git(command):
     )
 
     if result.returncode != 0:
+
         print("\nGit error:")
         print(result.stderr)
+
         raise SystemExit
 
     return result.stdout.strip()
 
 
+# --------------------------------------------------
+# GIT ADD
+# --------------------------------------------------
+
 print("\n----------------------------------------")
-print("Saving to GitHub...")
+print("Updating GitHub...")
 print("----------------------------------------")
 
-run_git(["git", "add", "."])
 
-commit_message = f"Daily log - {date_string}"
+git([
+    "git",
+    "add",
+    "12603644.xlsx",
+    "logs/"
+])
 
-commit_result = subprocess.run(
-    ["git", "commit", "-m", commit_message],
+
+# --------------------------------------------------
+# GIT COMMIT
+# --------------------------------------------------
+
+commit_message = (
+    f"Daily log - {date_string}"
+)
+
+
+commit = subprocess.run(
+    [
+        "git",
+        "commit",
+        "-m",
+        commit_message
+    ],
     cwd=REPO,
     text=True,
     capture_output=True
 )
 
-if commit_result.returncode != 0:
+
+if commit.returncode != 0:
+
     print("\nGit commit failed:")
-    print(commit_result.stdout)
-    print(commit_result.stderr)
-
-    input("\nPress Enter to exit...")
-    raise SystemExit
-
-
-push_result = subprocess.run(
-    ["git", "push"],
-    cwd=REPO,
-    text=True,
-    capture_output=True
-)
-
-if push_result.returncode != 0:
-    print("\nGit push failed:")
-    print(push_result.stdout)
-    print(push_result.stderr)
+    print(commit.stdout)
+    print(commit.stderr)
 
     input("\nPress Enter to exit...")
     raise SystemExit
 
 
 # --------------------------------------------------
-# DONE
+# GIT PUSH
+# --------------------------------------------------
+
+push = subprocess.run(
+    [
+        "git",
+        "push"
+    ],
+    cwd=REPO,
+    text=True,
+    capture_output=True
+)
+
+
+if push.returncode != 0:
+
+    print("\nGit push failed:")
+    print(push.stdout)
+    print(push.stderr)
+
+    input("\nPress Enter to exit...")
+    raise SystemExit
+
+
+# --------------------------------------------------
+# SUCCESS
 # --------------------------------------------------
 
 print("\n========================================")
-print("             SUCCESS")
+print("              SUCCESS")
 print("========================================")
 
-print(f"\nExcel updated:")
-print(f"  {EXCEL_FILE.name}")
+print(
+    f"\nDate: {next_date.strftime('%d %B %Y')}"
+)
 
-print(f"\nDaily log created:")
-print(f"  logs/{date_string}.md")
+print(
+    f"Excel: {EXCEL_FILE.name}"
+)
 
-print(f"\nGit commit:")
-print(f"  {commit_message}")
+print(
+    f"Log: logs/{date_string}.md"
+)
 
-print("\nEverything has been pushed to GitHub.")
+print(
+    f"Commit: {commit_message}"
+)
+
+print("\nGitHub has been updated.")
 
 input("\nPress Enter to exit...")
